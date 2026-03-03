@@ -12,11 +12,12 @@ Create these as your todo items at the start. Mark each one as you complete it �
 4. **Run test-merge-order.sh** — locally merge clean PRs in order, record which merged/conflicted
 5. **Find or create Merge Queue milestone** — get the milestone number
 6. **Sync PRs to milestone** — add clean PRs, remove ones with blockers
-7. **Write the merge meeting report** — fill the template with all data including merge test results
-8. **Update milestone description** — overwrite with the final report
-9. **Self-evaluate execution** — read `.ambient/rubric.md` and score your own efficiency (5 criteria, 25 points total)
+7. **Comment on blocked PRs** — post blocker summaries on PRs not in the queue (only if PR was updated since last comment)
+8. **Write the merge meeting report** — fill the template with all data including merge test results
+9. **Update milestone description** — overwrite with the final report
+10. **Self-evaluate execution** — read `.ambient/rubric.md` and score your own efficiency (5 criteria, 25 points total)
 
-**Do not stop until all 9 items are done.** The self-evaluation is the final step.
+**Do not stop until all 10 items are done.** The self-evaluation is the final step.
 
 ## Workflow
 
@@ -273,7 +274,7 @@ A 2-3 sentence summary at the top of the report. Mention how many PRs are ready,
 
 PRs with `fail_count == 0` and `isDraft == false` go in the condensed summary table — one row per PR. List them in the order from the `merge_order` array (smallest and least conflicting first).
 
-For fork PRs (`is_fork == true`), add "⚠️ Fork — no agent review" to the Notes column so maintainers know manual review is needed.
+For fork PRs (`is_fork == true`), add "🍴 Fork — no agent review" to the Notes column so maintainers know manual review is needed.
 
 The **Merge Test** column shows the result from `test-merge-order.sh`:
 - `merged` — PR merged cleanly on top of all previous PRs in the sequence
@@ -293,11 +294,9 @@ PRs with `fail_count > 0` and `isDraft == false` get the full blocker table. PRs
 
 ### Fork PRs
 
-PRs with `is_fork == true` go in the Fork PRs table — a separate section from the internal clean/blocker tables. This gives maintainers a consolidated view of all external contributions that need manual review.
+Fork PRs are **not** separated into their own section. They appear in the same Clean PRs or PRs With Blockers tables as internal PRs, based on their blocker count — just like any other PR.
 
-Include CI status, conflict status, and review status so maintainers can quickly see which fork PRs are otherwise ready. The `fork_owner` field shows which fork the PR came from.
-
-Fork PRs should **not** appear in the Clean PRs or PRs With Blockers sections — they get their own table regardless of blocker count.
+To signal that a PR is from a fork, add "🍴 Fork — no agent review" to the **Notes** column. If the `fork_owner` field is available, include it: "🍴 Fork (`fork_owner`) — no agent review". This gives maintainers a clear visual indicator without fragmenting the report.
 
 ### Recommend Closing
 
@@ -443,9 +442,73 @@ gh api -X PATCH "repos/{owner}/{repo}/milestones/${MILESTONE_NUM}" \
 - The description is **overwritten** each run (not appended).
 - Always include the `Last updated` timestamp at the top of the description.
 
+## Phase 5: Comment on Blocked PRs
+
+After milestone sync, post a blocker summary comment on each PR that has blockers (`fail_count > 0`) and was **not** added to the Merge Queue. This gives PR authors direct feedback on what's blocking their PR.
+
+**All comments are identified by a hidden HTML marker:** `<!-- pr-overview-bot -->` at the end of the comment body. This is how you find and manage previous comments from this workflow.
+
+### Noise reduction rules
+
+To avoid spamming PRs with redundant comments:
+
+1. **Find existing comment:** For each blocked PR, list its comments and look for one containing `<!-- pr-overview-bot -->`.
+2. **Check freshness:** If an existing comment is found, compare the PR's `updatedAt` timestamp with the comment's `created_at` timestamp.
+   - If the PR was **not updated** since the last comment → **skip** (the existing comment is still current).
+   - If the PR **was updated** since the last comment → **delete** the old comment, then **post** a new one.
+3. **No existing comment:** Post a new comment.
+
+### Finding and deleting old comments
+
+```bash
+# List comments and find the one with our marker
+OLD_COMMENT_ID=$(gh api "repos/{owner}/{repo}/issues/{number}/comments" \
+  --jq '.[] | select(.body | contains("<!-- pr-overview-bot -->")) | .id')
+
+# Delete it if found
+if [ -n "$OLD_COMMENT_ID" ]; then
+  gh api -X DELETE "repos/{owner}/{repo}/issues/comments/${OLD_COMMENT_ID}"
+fi
+```
+
+### Comment format
+
+Post a concise, actionable comment listing only the blockers:
+
+```markdown
+### Merge Readiness — Blockers Found
+
+| Check | Status | Detail |
+|-------|--------|--------|
+| CI | FAIL | `build` failed |
+| Merge conflicts | pass | — |
+| Review comments | FAIL | Changes requested by @reviewer |
+| Jira hygiene | pass | RHOAIENG-1234 |
+| Staleness | pass | — |
+
+> This comment is auto-generated by the PR Overview workflow and will be updated when the PR changes.
+
+<!-- pr-overview-bot -->
+```
+
+Only include rows for the blocker categories relevant to this PR (all six). Use `pass`, `FAIL`, or `warn` in the Status column, matching the per-PR analysis data. The Detail column should have the same detail text used in the merge meeting report.
+
+### Posting the comment
+
+```bash
+gh api "repos/{owner}/{repo}/issues/{number}/comments" \
+  -f body="${COMMENT_BODY}"
+```
+
+### What to skip
+
+- **Clean PRs** (fail_count == 0) — no comment needed, they're in the queue.
+- **Draft PRs** — don't comment on drafts, the author hasn't marked them ready.
+- **PRs recommended for closing** — don't comment, they'll be flagged in the report instead.
+
 ## Important Notes
 
-- Do NOT approve or merge any PRs. This workflow is read-only (except for milestone management).
+- Do NOT approve or merge any PRs. This workflow is read-only (except for milestone management and blocker comments).
 - If the fetch script fails, report the error clearly and stop.
 - Always include the PR URL as a link: `[#123](url)`.
 - Size format: `X files (+A/-D)` where A = additions, D = deletions.

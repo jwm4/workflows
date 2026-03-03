@@ -52,20 +52,6 @@
 
 {{/each}}
 
-{{#if FORK_PR_ROWS}}
-## Fork PRs ({{FORK_COUNT}})
-
-> Fork PRs do not receive automated agent reviews. Maintainers must review these manually before merging.
-
-| # | PR | Author | Fork | CI | Conflicts | Reviews | Updated | Notes |
-|---|---|---|---|---|---|---|---|---|
-{{#each FORK_PR_ROWS}}
-| {{RANK}} | [#{{NUMBER}}]({{URL}}) — {{TITLE}} | {{AUTHOR}} | {{FORK_OWNER}} | {{CI_STATUS}} | {{CONFLICT_STATUS}} | {{REVIEW_STATUS}} | {{UPDATED}} | {{NOTES}} |
-{{/each}}
-
----
-
-{{/if}}
 
 {{#if RECOMMEND_CLOSE_ENTRIES}}
 ## Recommend Closing
@@ -89,4 +75,4 @@
 - **One blocker away:** {{NEAR_COUNT}} PRs
 - **Needs work:** {{WORK_COUNT}} PRs
 - **Recommend closing:** {{CLOSE_COUNT}} PRs
-{{#if FORK_COUNT}}- **Fork PRs (no agent review):** {{FORK_COUNT}} — require manual review before merge{{/if}}
+{{#if FORK_COUNT}}- **Fork PRs:** {{FORK_COUNT}} (marked with 🍴 in tables — no automated agent review, require manual review){{/if}}
