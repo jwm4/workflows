@@ -1,0 +1,88 @@
+name: Lint Workflows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workflows/**'
+  pull_request:
+    paths:
+      - 'workflows/**'
+
+jobs:
+  lint:
+    name: Validate workflow definitions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate ambient.json files
+        run: |
+          echo "Validating ambient.json files..."
+          errors=0
+          for f in workflows/*/.ambient/ambient.json; do
+            if [ ! -f "$f" ]; then
+              continue
+            fi
+            if python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ $f — invalid JSON"
+              python3 -c "import json; json.load(open('$f'))" 2>&1 | tail -1
+              errors=$((errors + 1))
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo ""
+            echo "Found $errors invalid ambient.json file(s)"
+            exit 1
+          fi
+          echo "All ambient.json files are valid"
+
+      - name: Check required fields in ambient.json
+        run: |
+          echo "Checking required fields..."
+          warnings=0
+          for f in workflows/*/.ambient/ambient.json; do
+            [ ! -f "$f" ] && continue
+            workflow=$(echo "$f" | cut -d/ -f2)
+            missing=""
+            for field in name description startupPrompt; do
+              val=$(python3 -c "import json; d=json.load(open('$f')); v=d.get('$field',''); print(v if v else '')" 2>/dev/null)
+              if [ -z "$val" ]; then
+                missing="$missing $field"
+              fi
+            done
+            if [ -n "$missing" ]; then
+              echo "  ⚠ $workflow: missing$missing"
+              warnings=$((warnings + 1))
+            else
+              echo "  ✓ $workflow"
+            fi
+          done
+          if [ "$warnings" -gt 0 ]; then
+            echo ""
+            echo "$warnings workflow(s) have missing fields (name, description, or startupPrompt)"
+            echo "Workflows without startupPrompt will not show a greeting when activated"
+          fi
+
+      - name: Verify workflow directory structure
+        run: |
+          echo "Checking workflow structure..."
+          errors=0
+          for dir in workflows/*/; do
+            workflow=$(basename "$dir")
+            if [ ! -f "$dir/.ambient/ambient.json" ]; then
+              echo "  ✗ $workflow: missing .ambient/ambient.json"
+              errors=$((errors + 1))
+            elif [ ! -d "$dir/.claude" ]; then
+              echo "  ⚠ $workflow: missing .claude/ directory"
+            else
+              echo "  ✓ $workflow"
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo ""
+            echo "Found $errors workflow(s) without ambient.json"
+            exit 1
+          fi

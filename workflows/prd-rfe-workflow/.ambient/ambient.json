@@ -8,7 +8,7 @@
     "RFE List": "artifacts/rfes.md",
     "RFE Tasks": "artifacts/rfe-tasks/*.md",
     "Prioritization Matrix": "artifacts/prioritization.md"
-  }
+  },
   "rubric": {
     "activationPrompt": "After creating rfe.md, evaluate the quality of the RFEs. Utilize the evaluator.md to better understand the criteria of a quality RFE. Utilize that rubric to rate the RFEs and produce a score out of 25, an aggregate of each score for each criteria.",
     "schema": {
@@ -24,7 +24,4 @@
       }
     }
   }
-  
 }
-
-
