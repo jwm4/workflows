@@ -119,10 +119,13 @@ Note: `review_status = "needs_review"` in `analysis.json` means the sub-agent ha
 Use `templates/review-queue.md`. Sections:
 
 - **Ready for Review** — condensed table, priority ordered
-- **Blocked PRs** — table ordered by last updated (most recent first), limit 50. Each row shows blocker icons (CI, CONFLICT, REVIEW, STALE, OVERLAP) and a short issue snippet (e.g., "CI: e2e failing", "CHANGES_REQUESTED from @bob", "Merge conflicts")
-- **Almost Ready** — PRs close to merge (1 mechanical blocker OR sub-agent verdict of `almost`). Write a short agent-generated blurb per PR: 1-2 sentences of context (what happened in review, what's been addressed), then a "Needs:" line with the one concrete action to unblock
+- **Almost Ready** — PRs close to merge (1 mechanical blocker OR sub-agent verdict of `almost`). For each PR write:
+  - Bullet points summarizing the situation (not one big paragraph)
+  - What's been addressed, what's outstanding
+  - A "Needs:" line with the one concrete action to unblock
+- **Remaining Blocked** — table for PRs with 2+ blockers, ordered by last updated. The Issue column should be bullet points listing each blocker concisely (e.g., "- CI: e2e failing\n- Merge conflicts\n- CHANGES_REQUESTED from @bob"). No blocker icons column.
 - **Recommend Closing** — stale/abandoned PRs
-- **Drafts** — WIP PRs
+- **Drafts** — simple table, no notes column
 - **Summary** — counts by bucket + by type
 
 ## Blocker Checklist

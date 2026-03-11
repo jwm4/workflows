@@ -11,8 +11,6 @@
 
 ## Ready for Review ({{READY_COUNT}})
 
-> Priority order: bug fixes > features > refactors > docs. Smallest first.
-
 | # | PR | Type | Author | Size | Updated | Action Needed |
 |---|---|---|---|---|---|---|
 {{#each READY_PR_ROWS}}
@@ -21,52 +19,34 @@
 
 ---
 
-## Blocked PRs ({{BLOCKED_COUNT}})
-
-> Ordered by last updated (most recent first). Showing up to 50.
-
-| # | PR | Type | Author | Updated | Blockers | Issue |
-|---|---|---|---|---|---|---|
-{{#each BLOCKED_PR_ROWS}}
-| {{RANK}} | [#{{NUMBER}}]({{URL}}) — {{TITLE}} | {{TYPE}} | {{AUTHOR}} | {{UPDATED}} | {{BLOCKER_ICONS}} | {{ISSUE_SNIPPET}} |
-{{/each}}
-
-<details>
-<summary>Blocker legend</summary>
-
-| Icon | Meaning |
-|------|---------|
-| CI | CI checks failing |
-| CONFLICT | Merge conflicts |
-| REVIEW | Changes requested or unresolved review |
-| STALE | No activity in 30+ days |
-| OVERLAP | Diff overlap with another PR |
-
-</details>
-
----
-
 {{#if ALMOST_READY_ENTRIES}}
 ## Almost Ready ({{NEAR_COUNT}})
-
-> One thing away from merge. Agent-written context for each.
 
 {{#each ALMOST_READY_ENTRIES}}
 **[#{{NUMBER}}]({{URL}}) — {{TITLE}}**
 {{TYPE}} · {{AUTHOR}} · {{SIZE}} · {{UPDATED}}
-{{CONTEXT}}
+
+{{CONTEXT_BULLETS}}
+
 **Needs:** {{WHAT_NEEDED}}
 
+---
+
+{{/each}}
+{{/if}}
+
+## Remaining Blocked ({{BLOCKED_COUNT}})
+
+| # | PR | Type | Author | Updated | Issue |
+|---|---|---|---|---|---|
+{{#each BLOCKED_PR_ROWS}}
+| {{RANK}} | [#{{NUMBER}}]({{URL}}) — {{TITLE}} | {{TYPE}} | {{AUTHOR}} | {{UPDATED}} | {{ISSUE_BULLETS}} |
 {{/each}}
 
 ---
 
-{{/if}}
-
 {{#if RECOMMEND_CLOSE_ENTRIES}}
 ## Recommend Closing ({{CLOSE_COUNT}})
-
-> Abandoned, superseded, or too stale to maintain. Close or ping the author.
 
 | PR | Author | Reason | Last Updated |
 |---|---|---|---|
@@ -81,10 +61,10 @@
 {{#if DRAFT_ROWS}}
 ## Drafts ({{DRAFT_COUNT}})
 
-| PR | Type | Author | Updated | Notes |
-|---|---|---|---|---|
+| PR | Type | Author | Updated |
+|---|---|---|---|
 {{#each DRAFT_ROWS}}
-| [#{{NUMBER}}]({{URL}}) — {{TITLE}} | {{TYPE}} | {{AUTHOR}} | {{UPDATED}} | {{NOTES}} |
+| [#{{NUMBER}}]({{URL}}) — {{TITLE}} | {{TYPE}} | {{AUTHOR}} | {{UPDATED}} |
 {{/each}}
 
 ---
@@ -97,9 +77,8 @@
 |--------|-------|
 | Ready for review | {{READY_COUNT}} |
 | In queue (milestone) | {{MILESTONE_COUNT}} |
-| Almost ready (1 blocker) | {{NEAR_COUNT}} |
-| Blocked (2+ blockers) | {{WORK_COUNT}} |
-| Recommend closing | {{CLOSE_COUNT}} |
+| Almost ready | {{NEAR_COUNT}} |
+| Blocked | {{BLOCKED_COUNT}} |
 | Drafts | {{DRAFT_COUNT}} |
 {{#if FORK_COUNT}}| Fork PRs (need manual review) | {{FORK_COUNT}} |{{/if}}
 | **Total open** | **{{TOTAL_PRS}}** |
