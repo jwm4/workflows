@@ -72,6 +72,9 @@ for PR_NUM in $PR_NUMBERS; do
     gh api "repos/${OWNER}/${REPO_NAME}/pulls/${PR_NUM}/comments" \
         --paginate 2>/dev/null > "${PR_TMP}/review_comments.json" || echo '[]' > "${PR_TMP}/review_comments.json"
 
+    gh api "repos/${OWNER}/${REPO_NAME}/pulls/${PR_NUM}/commits" \
+        --paginate 2>/dev/null > "${PR_TMP}/commits.json" || echo '[]' > "${PR_TMP}/commits.json"
+
     HEAD_SHA=$(jq -r '.headRefOid // empty' "${PR_TMP}/pr.json" 2>/dev/null || true)
     echo '[]' > "${PR_TMP}/check_runs.json"
     if [[ -n "$HEAD_SHA" ]]; then
@@ -96,6 +99,7 @@ for PR_NUM in $PR_NUMBERS; do
         --review-comments-json "${PR_TMP}/review_comments.json" \
         --check-runs-json "${PR_TMP}/check_runs.json" \
         --diff-json "${PR_TMP}/diff_files.json" \
+        --commits-json "${PR_TMP}/commits.json" \
         --output-dir "${OUTPUT_DIR}/${PR_NUM}" 2>/dev/null
 
     sleep 0.3

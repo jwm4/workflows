@@ -117,6 +117,7 @@ def main():
     parser.add_argument("--review-comments-json", required=True)
     parser.add_argument("--check-runs-json", required=True)
     parser.add_argument("--diff-json", required=True)
+    parser.add_argument("--commits-json", default=None)
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
 
@@ -185,6 +186,46 @@ def main():
     with open(f"{out}/reviews/overview.json", "w") as f:
         json.dump(reviews_overview, f, indent=2, ensure_ascii=False)
 
+    # -- Commits + Timeline --
+    commits_list = []
+    if args.commits_json:
+        try:
+            with open(args.commits_json) as f:
+                raw_commits = json.load(f)
+            for c in raw_commits:
+                commit = c.get("commit", {})
+                commits_list.append({
+                    "sha": c.get("sha", "")[:7],
+                    "message": commit.get("message", "").split("\n")[0],
+                    "author": commit.get("author", {}).get("name", ""),
+                    "timestamp": commit.get("author", {}).get("date", ""),
+                })
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+
+    # Build timeline: interleave commits and comments chronologically
+    timeline = []
+    for c in all_comments:
+        timeline.append({
+            "type": "comment",
+            "timestamp": c.get("timestamp", ""),
+            "author": c.get("author", ""),
+            "summary": c.get("body", "")[:120],
+            "source": c.get("source", ""),
+        })
+    for c in commits_list:
+        timeline.append({
+            "type": "commit",
+            "timestamp": c["timestamp"],
+            "author": c["author"],
+            "summary": c["message"][:120],
+            "sha": c["sha"],
+        })
+    timeline.sort(key=lambda x: x.get("timestamp", ""))
+
+    with open(f"{out}/timeline.json", "w") as f:
+        json.dump(timeline, f, indent=2, ensure_ascii=False)
+
     # -- Summary (written last, includes rollups) --
     author = (pr.get("author") or {}).get("login", "unknown")
     summary = {
@@ -223,6 +264,12 @@ def main():
             "decision": reviews_overview["decision"],
             "approvals": len(reviews_overview["approvals"]),
             "changes_requested_by": [cr["user"] for cr in reviews_overview["changes_requested"]],
+        },
+        "commits": {
+            "total": len(commits_list),
+            "latest": commits_list[-1]["message"] if commits_list else "",
+            "latest_sha": commits_list[-1]["sha"] if commits_list else "",
+            "latest_timestamp": commits_list[-1]["timestamp"] if commits_list else "",
         },
     }
     with open(f"{out}/summary.json", "w") as f:

@@ -22,7 +22,8 @@ Write artifacts to the **workspace root** `artifacts/` directory, not relative t
 
 ```text
 artifacts/{number}/
-├── summary.json              # Start here — PR metadata, mergeable, CI status, comment counts
+├── summary.json              # Start here — PR metadata, mergeable, CI status, comment/commit counts
+├── timeline.json             # Chronological interleave of commits + comments (see what happened when)
 ├── comments/
 │   ├── overview.json         # Comment counts, has_agent_prompts flag, authors
 │   └── 01.json, 02.json...  # Each comment chronologically (with id for replying)

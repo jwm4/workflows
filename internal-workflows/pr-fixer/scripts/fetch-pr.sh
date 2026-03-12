@@ -55,6 +55,10 @@ gh api "repos/${OWNER}/${REPO_NAME}/pulls/${PR_NUM}/comments" \
     --paginate > "${TMPDIR}/review_comments.json" 2>"${TMPDIR}/rc.err" &
 PID_RC=$!
 
+gh api "repos/${OWNER}/${REPO_NAME}/pulls/${PR_NUM}/commits" \
+    --paginate > "${TMPDIR}/commits.json" 2>"${TMPDIR}/commits.err" &
+PID_COMMITS=$!
+
 gh api "repos/${OWNER}/${REPO_NAME}/pulls/${PR_NUM}/files" \
     --paginate 2>"${TMPDIR}/diff.err" \
     | jq '[.[] | {filename, status, additions, deletions, patch}]' \
@@ -64,6 +68,7 @@ PID_DIFF=$!
 wait "$PID_PR" 2>/dev/null || { cat "${TMPDIR}/pr.err" >&2; echo '{}' > "${TMPDIR}/pr.json"; }
 wait "$PID_REVIEWS" 2>/dev/null || { cat "${TMPDIR}/reviews.err" >&2; echo '[]' > "${TMPDIR}/reviews.json"; }
 wait "$PID_RC" 2>/dev/null || { cat "${TMPDIR}/rc.err" >&2; echo '[]' > "${TMPDIR}/review_comments.json"; }
+wait "$PID_COMMITS" 2>/dev/null || { cat "${TMPDIR}/commits.err" >&2; echo '[]' > "${TMPDIR}/commits.json"; }
 wait "$PID_DIFF" 2>/dev/null || { cat "${TMPDIR}/diff.err" >&2; echo '[]' > "${TMPDIR}/diff_files.json"; }
 
 # -- Check runs (needs HEAD_SHA from pr.json) --
@@ -82,6 +87,7 @@ python3 "${SCRIPT_DIR}/structure-pr-data.py" \
     --review-comments-json "${TMPDIR}/review_comments.json" \
     --check-runs-json "${TMPDIR}/check_runs.json" \
     --diff-json "${TMPDIR}/diff_files.json" \
+    --commits-json "${TMPDIR}/commits.json" \
     --output-dir "${OUTPUT_DIR}"
 
 # -- Fetch CI failure logs (optional) --

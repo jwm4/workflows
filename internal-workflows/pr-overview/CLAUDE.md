@@ -27,7 +27,8 @@ $WORKSPACE_ROOT/artifacts/pr-review/
 ├── index.json                     # List of all open PRs
 ├── queue.json                     # Ranked queue (written by analyze step)
 └── {number}/
-    ├── summary.json               # PR metadata, CI status, comment counts
+    ├── summary.json               # PR metadata, CI status, comment counts, commit info
+    ├── timeline.json              # Chronological interleave of commits + comments
     ├── analysis.json              # Blocker statuses, type, fail_count (written by analyze)
     ├── comments/
     │   ├── overview.json          # Comment counts, has_agent_prompts flag
@@ -53,12 +54,20 @@ The analyze script handles mechanical checks. Sub-agents produce the final verdi
 
 Spawn sub-agents in parallel (batches of ~10). Each sub-agent reads **all of these** for its PRs:
 
-1. **`summary.json`** — the ground truth: current CI status, mergeable state, review decision, comment counts
-2. **`ci/overview.json`** — which checks are passing/failing right now
-3. **`reviews/overview.json`** — who approved, who requested changes, current state
-4. **`comments/`** — the conversation history (context, not truth)
+1. **`summary.json`** — the ground truth: current CI status, mergeable state, review decision, commit count
+2. **`timeline.json`** — **start here** — chronological interleaving of commits and comments. This shows the full story: reviewer comments, then author commits, then more comments. You can see if a commit after a review comment likely addressed the concern.
+3. **`ci/overview.json`** — which checks are passing/failing right now
+4. **`reviews/overview.json`** — who approved, who requested changes, current state
+5. **`comments/`** — individual comment files if you need full bodies (timeline only has 120-char summaries)
 
-**Comments are context, not truth.** A comment saying "CI is failing" from 3 days ago means nothing if `ci.status` is `pass` now. A CHANGES_REQUESTED review might be stale if the author addressed the concern in a later commit. Always cross-reference comments against the current state in `summary.json`.
+**Use the timeline to determine if issues were addressed.** If you see:
+- Review comment at March 8: "fix error handling in get_env()"
+- Commit at March 9: "fix: handle nil error in get_env()"
+- No further comment from that reviewer
+
+Then the concern was likely addressed — the PR needs re-approval, not more code changes.
+
+**Comments are context, not truth.** A comment saying "CI is failing" from 3 days ago means nothing if `ci.status` is `pass` now. Always cross-reference against the current state in `summary.json`.
 
 Each sub-agent returns:
 
