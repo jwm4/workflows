@@ -1,188 +1,243 @@
-# Review Queue
+# Review Queue — Agent Instructions
 
-You evaluate all open PRs in a repo and produce a prioritized review queue — what needs human attention, ranked by type and urgency.
+You evaluate open pull requests and produce a prioritized review queue. You work directly with the `gh` CLI — no scripts, no intermediate files.
 
-## What You Do
+## Input
 
-1. **Fetch all PR data** using the script
-2. **Analyze PRs** using the script (blocker checks, type classification)
-3. **Evaluate each PR's comments** via sub-agents
-4. **Manage the "Review Queue" milestone** — add clean PRs, remove blocked ones
-5. **Comment on blocked PRs** with blocker summaries
-6. **Write the review queue report** and update the milestone description
-7. **Self-evaluate** using `.ambient/rubric.md`
+The user provides the repo (e.g. `ambient-code/platform`). If not provided, ask for it. Use it as `REPO` in all commands below.
 
-## Scripts
+## Workflow
 
-### Fetch
+### Step 1: Fetch all open PRs active in the last 2 weeks
+
+Single `gh pr list` call. Filter to PRs with `updatedAt` within the last 14 days using inline Python.
 
 ```bash
-./scripts/fetch-prs.sh --repo <owner/repo> --output-dir "$WORKSPACE_ROOT/artifacts/pr-review"
+gh pr list --repo $REPO --state open --limit 100 \
+  --json number,title,author,updatedAt,createdAt,headRefName,mergeable,statusCheckRollup,reviewDecision,labels,isDraft,additions,deletions,changedFiles,url,isCrossRepository,headRepositoryOwner
 ```
 
-Write artifacts to the **workspace root** `artifacts/` directory, not relative to the workflow directory. Produces per-PR directories:
+From the JSON, extract per-PR:
+- **CI status**: scan `statusCheckRollup` for any check with conclusion `FAILURE`, `TIMED_OUT`, `CANCELLED`, or `ACTION_REQUIRED`
+- **Mergeable**: `MERGEABLE`, `CONFLICTING`, or `UNKNOWN`
+- **Review decision**: `APPROVED`, `CHANGES_REQUESTED`, or `REVIEW_REQUIRED`
+- **Type**: classify from title prefix and branch name (see classification table below)
 
-```text
-$WORKSPACE_ROOT/artifacts/pr-review/
-├── index.json                     # List of all open PRs
-├── queue.json                     # Ranked queue (written by analyze step)
-└── {number}/
-    ├── summary.json               # PR metadata, CI status, comment counts, commit info
-    ├── timeline.json              # Chronological interleave of commits + comments
-    ├── analysis.json              # Blocker statuses, type, fail_count (written by analyze)
-    ├── comments/
-    │   ├── overview.json          # Comment counts, has_agent_prompts flag
-    │   └── 01.json, 02.json...  # Chronological comment stream
-    ├── ci/
-    │   └── overview.json          # Pass/fail/pending check lists
-    ├── diff.json                  # Changed files with patches
-    └── reviews/
-        └── overview.json          # Approvals, changes requested
-```
+### Step 2: Get reviews and comments for actionable PRs
 
-### Analyze
+**Prioritize which PRs to deep-dive on.** Skip drafts and obviously stale/conflicting PRs unless they have `CHANGES_REQUESTED`. Focus on PRs that could realistically be merged or unblocked.
+
+For each actionable PR, batch these into a single loop:
 
 ```bash
-python3 ./scripts/analyze-prs.py --output-dir "$WORKSPACE_ROOT/artifacts/pr-review"
+for pr in $PR_NUMBERS; do
+  echo "=== PR #$pr ==="
+  # Last commit date
+  gh pr view $pr --repo $REPO --json commits --jq '.commits[-1].committedDate'
+  # Formal reviews (approvals, changes requested)
+  gh api repos/$REPO/pulls/$pr/reviews --jq '.[] | select(.state != "COMMENTED" and .state != "DISMISSED") | "\(.user.login): \(.state) @ \(.submitted_at)"'
+  # Recent inline comments — last 5, newest first
+  gh api "repos/$REPO/pulls/$pr/comments?per_page=5&sort=created&direction=desc" --jq '.[] | "\(.user.login) @ \(.created_at): \(.body[0:200])"'
+  # Recent issue comments — last 3, newest first
+  gh api "repos/$REPO/issues/$pr/comments?per_page=3&sort=created&direction=desc" --jq '.[] | "\(.user.login) @ \(.created_at): \(.body[0:200])"'
+done
 ```
 
-Reads each `summary.json`, writes `analysis.json` per PR and `queue.json` at top level.
+### Step 3: Classify and triage
 
-## Sub-Agent Evaluation
+**Type classification** (from title prefix, branch name, or labels):
 
-The analyze script handles mechanical checks. Sub-agents produce the final verdict per PR by building a concern checklist, verifying each item, and consolidating.
+| Type | Signals | Priority |
+|------|---------|----------|
+| `bug-fix` | `fix:`, `fix(`, `fix/`, `bug/`, `hotfix/` | Highest |
+| `feature` | `feat:`, `feat(`, `feat/`, `feature/` | High |
+| `refactor` | `refactor:`, `refactor/` | Medium |
+| `chore` | `chore:`, `ci:`, `build:`, dependabot, `[Amber]`, bot authors | Medium |
+| `docs` | `docs:`, `docs/`, markdown-only | Lower |
 
-Spawn sub-agents in parallel (batches of ~10). Each sub-agent works through **three steps** per PR:
+**Blocker evaluation** — for each PR, mark each check as `pass`, `FAIL`, or `warn`:
 
-### Step 1: Read everything and build a concern list
+| Check | FAIL when | warn when |
+|-------|-----------|-----------|
+| CI | Any check with `FAILURE`/`TIMED_OUT`/`CANCELLED` | Checks still in progress |
+| Conflicts | `mergeable == CONFLICTING` | `mergeable == UNKNOWN` |
+| Reviews | `CHANGES_REQUESTED` without subsequent `APPROVED`/`DISMISSED` | — |
+| Jira | — | No `RHOAIENG-\d+` in title, body, or branch (informational only) |
 
-Read these files:
-- **`summary.json`** — ground truth: current CI, mergeable, review decision, commit count
-- **`timeline.json`** — chronological interleave of commits and comments (start here for the narrative)
-- **`ci/overview.json`** — which checks are passing/failing right now
-- **`reviews/overview.json`** — who approved, who requested changes
-- **`comments/`** — full comment bodies if timeline summaries aren't enough
+**Staleness check**: Compare last commit date against review/comment dates:
+- Review raised **BEFORE** latest commit → flag as "may be addressed — investigate"
+- Review raised **AFTER** latest commit → flag as "likely still unaddressed"
 
-Build a checklist of every concern raised from any source:
-- Each reviewer comment or inline thread → one concern
-- CI failures → one concern per failing check
-- Merge conflicts → one concern
-- CHANGES_REQUESTED reviews → one concern per reviewer
-- Bot review findings → one concern per finding (not one per comment — a single bot comment may raise 5 issues, or 5 bot comments may all be about the same thing)
+### Step 4: Investigate potentially stale reviews
 
-**Not every comment is a concern.** Skip:
-- Bot status comments ("CI passed", "review-queue-bot" markers)
-- Acknowledgments ("thanks", "LGTM", "looks good")
-- Questions that were answered
-- Duplicate comments about the same issue
+Only for **substantive** issues — Major/Critical from CodeRabbit, or `CHANGES_REQUESTED` from humans. Skip trivial nitpicks.
 
-### Step 2: Verify each concern against current state
+For each flagged review:
+1. Read the review comment body to understand the specific concern
+2. Identify which file(s) the concern is about
+3. Fetch the relevant file diff:
+   ```bash
+   gh api repos/$REPO/pulls/{number}/files --jq '.[] | select(.filename == "the/file.go") | .patch'
+   ```
+4. Read the patch to determine if the concern was addressed
+5. Record verdict: "resolved by commit on {date}" or "still unaddressed despite {date} commit"
 
-For each concern on your list, check if it's still valid:
+### Step 5: Produce the report
 
-- **CI comment says failing** → check `ci/overview.json` — is it actually failing now? If CI is green, mark resolved.
-- **Reviewer requested changes** → check `timeline.json` — is there a commit after the review that looks like it addresses the concern? If yes, mark as "likely addressed, needs re-approval."
-- **Bot flagged a code issue** → check `timeline.json` — was there a commit after the bot review? Check if the commit message suggests the issue was fixed. If unsure, read the full comment body from `comments/` and cross-reference with `diff.json` to see if the relevant code was changed.
-- **Merge conflicts** → check `summary.json` mergeable field — is it CONFLICTING right now?
-- **Stale concerns** → if the comment is from weeks ago and there have been multiple commits since, it's likely stale.
+The report is optimized for a developer asking "what should I look at next?" Group PRs by the action the reader should take, not by PR status. Use the tiered format below exactly.
 
-Mark each concern as: **open** (still needs action), **resolved** (addressed), or **irrelevant** (not a real issue).
+Within each tier, sort by: bug-fix > feature > chore > docs, then smallest first.
 
-### Step 3: Consolidate and produce verdict
+---
 
-Group related concerns (e.g., 3 bot comments about the same function → 1 item). Drop resolved and irrelevant items. What's left is the real picture.
+#### Output format
 
-Return:
-- **verdict**: ready / almost / blocked / stale
-- **review_summary**: bullet points — what's resolved, what's still open
-- **action_needed**: the one concrete thing that needs to happen next
-- **action_owner**: who needs to act (`@author`, `@reviewer-name`, `@maintainer`)
+Every tier uses the same core columns so the report is scannable at a glance:
 
-## Ranking
+| Column | Contents |
+|--------|----------|
+| **#** | PR number |
+| **Title** | PR title (truncated to ~50 chars if needed) |
+| **Author** | GitHub login |
+| **Last Active** | Date of most recent update (e.g. `Mar 16`) |
+| **Mergeable** | `✅` or `❌ Conflicts` |
+| **CI** | `✅ All pass` or `❌ {failing check names}` |
+| **Review Issues** | Human and CodeRabbit findings — severity, whether addressed or stale, reviewer names. `✅ Approved (name)` if approved. `Awaiting review` if no reviews yet. |
 
-1. Drafts last
-2. Fewer blockers first (clean before blocked)
-3. Priority labels boost (`critical`, `hotfix`, `bug`)
-4. Type: bug fixes > features > refactors > docs
-5. Recently updated first (active PRs over stale ones)
-6. Smaller first
+The **Review Issues** column is the most important — it tells the reader whether they need to act. Include:
+- Approval status and who approved
+- CodeRabbit findings with severity (Critical/Major/Minor) and whether addressed by a later commit or still unaddressed
+- Human review status (CHANGES_REQUESTED from whom, whether subsequently addressed)
+- "Awaiting review" if no reviews exist yet
 
-## Milestone
+```
+## Active PRs (Last 2 Weeks) — {REPO}
 
-Find or create **"Review Queue"** milestone (also check for "Merge Queue"). Add clean PRs, remove blocked ones. Overwrite description with the report.
+### Review & Merge Now
 
-## Blocker Comments
+These PRs are approved, CI green, no conflicts — just need someone to click merge.
 
-Post **after sub-agent evaluation is complete**.
+| # | Title | Author | Last Active | Mergeable | CI | Review Issues |
+|---|-------|--------|-------------|-----------|-----|---------------|
+| ... |
 
-Use `<!-- review-queue-bot -->` marker (also check for legacy `<!-- pr-overview-bot -->`).
+### Review Next
 
-### Clean PRs: remove old blocker comments
+These PRs are CI green, no conflicts, no blocking issues — they need your review.
+Sorted by priority: bug fixes first, smallest PRs first.
 
-If a PR is now clean (`fail_count == 0` after sub-agent evaluation), **delete any existing blocker comment** on it. The PR moved to "Ready for Review" — a stale blocker comment is confusing.
+| # | Title | Author | Last Active | Mergeable | CI | Review Issues |
+|---|-------|--------|-------------|-----------|-----|---------------|
+| ... |
+
+### Needs Author Work
+
+These PRs have blockers the author needs to fix. Don't review until resolved.
+
+| # | Title | Author | Last Active | Mergeable | CI | Review Issues | Action Needed |
+|---|-------|--------|-------------|-----------|-----|---------------|---------------|
+| ... |
+
+Action Needed column: specific next step for the author.
+
+### Stale / Conflicting
+
+PRs with merge conflicts, no recent activity, or multiple blockers.
+
+| # | Title | Author | Last Active | Mergeable | CI | Review Issues |
+|---|-------|--------|-------------|-----------|-----|---------------|
+| ... |
+
+### Dependabot / Automated
+
+| # | Title | Mergeable | CI | Review Issues |
+|---|-------|-----------|-----|---------------|
+| ... |
+
+---
+
+## Critical Issues
+
+Numbered list of the most important findings across all PRs.
+Focus on: production-risk items, security concerns, and patterns (e.g. "N PRs have conflicts").
+```
+
+---
+
+Use this exact tier structure. Do NOT split into sub-tiers like "Tier 1 / Tier 2" by recency — group by **action type** instead. Recency is shown in the Last Active column.
+
+The same report format is used for both the terminal output (shown to the user) and the milestone description (Step 6).
+
+### Step 6: Update the GitHub milestone
+
+Manage a **"Review Queue"** milestone as a living bucket of ready PRs.
 
 ```bash
-OLD=$(gh api "repos/{owner}/{repo}/issues/{number}/comments" \
-  --jq '.[] | select(.body | contains("<!-- review-queue-bot -->") or contains("<!-- pr-overview-bot -->")) | .id')
-[ -n "$OLD" ] && gh api -X DELETE "repos/{owner}/{repo}/issues/comments/${OLD}"
+# Find or create milestone
+MILESTONE_NUM=$(gh api "repos/$REPO/milestones" --jq '.[] | select(.title=="Review Queue") | .number')
+if [ -z "$MILESTONE_NUM" ]; then
+  MILESTONE_NUM=$(gh api "repos/$REPO/milestones" -f title="Review Queue" -f state=open \
+    -f description="Auto-managed by Review Queue workflow" --jq '.number')
+fi
 ```
 
-### Blocked PRs: post or update blocker comment
+**Sync PRs:**
+- First, list PRs currently in the milestone: `gh api "repos/$REPO/issues?milestone=$MILESTONE_NUM&state=all&per_page=100"`
+- **Remove** closed/merged PRs, PRs with conflicts, PRs with CI failures, PRs with `CHANGES_REQUESTED`: `gh api -X PATCH "repos/$REPO/issues/{number}" -F milestone=null`
+- **Add** open PRs with 0 blockers (CI green, no conflicts, no unresolved reviews, not draft): `gh api -X PATCH "repos/$REPO/issues/{number}" -F milestone=$MILESTONE_NUM`
 
-Skip drafts, recommend-close PRs, and PRs unchanged since last comment.
+**Update milestone description** with the full report from Step 5. Include a `Last updated` timestamp at the top.
 
-**Do NOT use a rigid blocker table.** Write a natural language comment that's actually helpful to the PR author. Use the analysis data and sub-agent verdict to write 2-4 sentences covering:
+If any API call fails, log the error and continue — milestone sync is best-effort.
 
-- What's blocking this PR specifically (not just "CI FAIL" — say which check failed and why if you know)
-- What the author needs to do to unblock it
-- Any context from the review conversation that's relevant
+### Step 7: Comment on blocked PRs
 
-Example of a **good** blocker comment:
+Post or update a blocker summary on each PR with `FAIL` blockers. Use `<!-- review-queue-bot -->` as a hidden marker to find/replace previous comments.
 
+**Rules:**
+- Find existing comment containing the marker
+- If the PR was NOT updated since the last bot comment, skip
+- If the PR WAS updated, delete the old comment and post a new one
+- Never comment on draft PRs or clean PRs
+- On any API error, skip and move on
+
+**Comment format:**
 ```markdown
-### Review Queue — Not Ready to Merge
+## Review Queue Status
 
-CI is failing on the `e2e` check — looks like the session cleanup test is timing out after your changes to the runner lifecycle. You also have merge conflicts with main on `components/backend/main.go` (likely from #877 which merged yesterday).
+| Check | Status | Detail |
+|-------|--------|--------|
+| CI | FAIL | `build` failed |
+| Conflicts | pass | --- |
+| Reviews | FAIL | Changes requested by @reviewer |
 
-@bobbravo2 also requested changes on the error handling in `get_env()` — they want a fallback value instead of raising.
+**Action needed:** {specific action from triage}
 
-**To unblock:** rebase onto main, fix the e2e timeout, and address Bob's review comment.
+> Auto-generated by Review Queue workflow. Updated when PR changes.
 
 <!-- review-queue-bot -->
 ```
 
-Example of a **bad** blocker comment (don't do this):
+### Step 8: Notify on resolved review feedback
+
+For PRs where Step 4 confirmed that a **human** reviewer's `CHANGES_REQUESTED` feedback was addressed by a subsequent commit:
 
 ```markdown
-| Check | Status | Detail |
-|-------|--------|--------|
-| CI | FAIL | --- |
-| Merge conflicts | FAIL | --- |
+@{reviewer} — the review queue analysis indicates your feedback from {date} may have been addressed in the {date} commit. Could you re-review?
+
+<!-- review-queue-bot -->
 ```
 
-Note: `review_status = "needs_review"` in `analysis.json` means the sub-agent hasn't evaluated yet — it is NOT a clean pass. Always evaluate before deciding if a PR is clean.
+For CodeRabbit issues confirmed resolved, note it in the Step 7 blocker comment (e.g. "CodeRabbit X issue resolved by Mar 15 commit") — no separate comment needed.
 
-## Report
+**Never** dismiss reviews or approve PRs. Only leave informational comments.
 
-Use `templates/review-queue.md`. Sections:
+## Important constraints
 
-- **Ready for Review** — condensed table, priority ordered
-- **Almost Ready** — PRs close to merge (1 mechanical blocker OR sub-agent verdict of `almost`). For each PR write:
-  - Bullet points summarizing the situation (not one big paragraph)
-  - What's been addressed, what's outstanding
-  - A "Needs:" line with the one concrete action to unblock
-- **Remaining Blocked** — table for PRs with 2+ blockers, ordered by last updated. The Issue column should be bullet points listing each blocker concisely (e.g., "- CI: e2e failing\n- Merge conflicts\n- CHANGES_REQUESTED from @bob"). No blocker icons column.
-- **Recommend Closing** — stale/abandoned PRs
-- **Drafts** — simple table, no notes column
-- **Summary** — counts by bucket + by type
-
-## Blocker Checklist
-
-| Check | Clear | Warn | Blocker |
-|-------|-------|------|---------|
-| CI | All pass | In progress | Any failed |
-| Conflicts | MERGEABLE | UNKNOWN | CONFLICTING |
-| Reviews | No issues | — | CHANGES_REQUESTED, sub-agent FAIL |
-| Jira | Reference found | No reference | — |
-| Fork | Internal | Fork (no bot review) | — |
-| Staleness | < 30 days | — | > 30 days |
+- **Read-only for approvals/merges** — never approve, merge, or dismiss reviews
+- **2-week window** — only evaluate PRs updated in the last 14 days
+- **No scripts or intermediate files** — work directly with `gh` CLI and inline processing
+- **Prioritize depth over breadth** — deep-dive on PRs that are close to mergeable; skip conflicting/draft PRs for review investigation
+- **Parallel where possible** — batch independent `gh` calls
+- **Best-effort side effects** — if milestone or comment API calls fail, log and continue; the report is the primary output
+- **Stop early** — once you have enough context for a PR verdict, move on

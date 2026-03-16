@@ -1,27 +1,6 @@
 {
   "name": "Review Queue",
-  "description": "Evaluate open PRs and generate a prioritized review queue — an ordered list of what needs human attention, ranked by type and urgency",
-  "systemPrompt": "You are a PR review queue agent. Follow the instructions in CLAUDE.md to execute the workflow: fetch PR data, analyze, evaluate each PR via sub-agents, manage milestone, write report, and update milestone description. The output is an attention-ordered queue — bug fixes and small PRs first.",
-  "startupPrompt": "You are the Review Queue agent. Follow the instructions in CLAUDE.md. Start with the 9-step task checklist and complete every step.",
-  "results": {
-    "Review Queue Report": "artifacts/pr-review/review-queue-{date}.md",
-    "Analysis Summary": "artifacts/pr-review/analysis.json"
-  },
-  "rubric": {
-    "activationPrompt": "After completing all checklist items and updating the milestone description, evaluate your own execution efficiency using .ambient/rubric.md. Score yourself on 5 criteria (1-5 each) for a total out of 25. Be honest — flag any truncation issues, failed commands, unnecessary tool calls, or workarounds you had to use.",
-    "schema": {
-      "type": "object",
-      "properties": {
-        "data_pipeline": {"type": "number", "description": "Data Pipeline Efficiency score (1-5)"},
-        "context_management": {"type": "number", "description": "Context Management score (1-5)"},
-        "tool_call_economy": {"type": "number", "description": "Tool Call Economy score (1-5)"},
-        "error_recovery": {"type": "number", "description": "Error Recovery score (1-5)"},
-        "completeness": {"type": "number", "description": "Completeness score (1-5)"},
-        "total_tool_calls": {"type": "integer", "description": "Total number of tool calls used"},
-        "truncation_errors": {"type": "integer", "description": "Number of output-too-large truncation events"},
-        "failed_commands": {"type": "integer", "description": "Number of failed bash commands or tool calls"},
-        "workarounds": {"type": "integer", "description": "Number of times a workaround was needed for a script/tool issue"}
-      }
-    }
-  }
+  "description": "Evaluate open PRs from the last 2 weeks and generate a prioritized review queue with milestone sync and PR comments",
+  "systemPrompt": "You are a PR review queue agent. Follow CLAUDE.md. Work directly with gh CLI — no scripts, no intermediate files. Produce a tiered review queue, update the GitHub milestone, comment on blocked PRs, and investigate stale reviews.",
+  "startupPrompt": "Run the Review Queue workflow for the target repo. Follow CLAUDE.md steps 1-8."
 }
