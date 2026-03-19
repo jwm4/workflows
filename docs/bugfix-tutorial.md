@@ -31,7 +31,9 @@ You can add the GitHub repository you want to work on by clicking the
 **Add Context** tab in the Explorer panel before you begin. However, this is
 not strictly necessary. If you give the workflow a link to the repository, or
 to an issue in that repository, it will clone the repo into your session
-automatically.
+automatically. Adding it in the Explorer panel can still be helpful for
+simplifying the model's task by ensuring it has the repo you want available
+before starting.
 
 ## Starting the Workflow
 
