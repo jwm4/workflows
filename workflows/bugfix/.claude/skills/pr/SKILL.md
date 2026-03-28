@@ -54,7 +54,9 @@ These are determined during pre-flight checks. Record each value as you go.
 | `AUTH_TYPE` | Step 0: `gh auth status` + `gh api user` | `user-token` / `github-app` / `none` |
 | `GH_USER` | Step 0: `gh api user` or `/installation/repositories` (for bots) | `jsmith` |
 | `UPSTREAM_OWNER/REPO` | Step 2c: `gh repo view --json nameWithOwner` | `acme/myproject` |
+| `DEFAULT_BRANCH` | Step 2c: detected from upstream repo | `main` / `dev` / `master` |
 | `FORK_OWNER` | Step 3: owner portion of fork's `nameWithOwner`, or `GH_USER` if newly created | `jsmith` |
+| `FORK_REMOTE` | Step 4: the git remote name pointing to the fork | `fork` / `origin` |
 | `REPO` | The repository name (without owner) | `myproject` |
 | `BRANCH_NAME` | Step 5: the branch you create | `bugfix/issue-42-null-check` |
 
@@ -142,21 +144,32 @@ the user's fork. Common patterns:
 | `fork` | user's name | Fork (read-write) |
 | `upstream` | upstream org | Upstream (read-only) |
 
-**2c. Identify the upstream repo:**
+**2c. Identify the upstream repo and its default branch:**
 
 If `gh` is authenticated:
 
 ```bash
-gh repo view --json nameWithOwner --jq .nameWithOwner
+gh repo view --json nameWithOwner,defaultBranchRef --jq '{nameWithOwner, defaultBranch: .defaultBranchRef.name}'
 ```
 
-If `gh` is NOT authenticated, extract from the git remote URL:
+This returns both the repo name and its default branch. Record
+`UPSTREAM_OWNER/REPO` and `DEFAULT_BRANCH` from the output.
+
+If `gh` is NOT authenticated, extract from the git remote:
 
 ```bash
+# Repo name
 git remote get-url origin | sed -E 's#.*/([^/]+/[^/]+?)(\.git)?$#\1#'
+
+# Default branch
+git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}'
 ```
 
-Record the result as `UPSTREAM_OWNER/REPO` — you'll need it later.
+Record the results as `UPSTREAM_OWNER/REPO` and `DEFAULT_BRANCH`.
+
+**Do not assume the default branch is `main`.** Many projects use `dev`,
+`master`, `develop`, or other branch names. All subsequent steps that
+reference the base branch MUST use `DEFAULT_BRANCH`.
 
 **2d. Check current branch and changes:**
 
@@ -181,6 +194,7 @@ Pre-flight summary:
 | AUTH_TYPE             | ___                |
 | GH_USER              | ___                |
 | UPSTREAM_OWNER/REPO  | ___                |
+| DEFAULT_BRANCH       | ___                |
 | EXISTING_REMOTES     | ___                |
 | HAS_CHANGES          | yes / no           |
 | CURRENT_BRANCH       | ___                |
@@ -313,8 +327,15 @@ If not present, add it:
 git remote add fork https://github.com/FORK_OWNER/REPO.git
 ```
 
-Use `fork` as the remote name. If `origin` already points to the fork, that's
-fine — just use `origin` in subsequent commands instead of `fork`.
+**Set `FORK_REMOTE`** based on what you find:
+
+- If you just added a remote named `fork` → `FORK_REMOTE` = `fork`
+- If `origin` already points to the fork (URL contains `FORK_OWNER`) →
+  `FORK_REMOTE` = `origin`
+- If another existing remote points to the fork → `FORK_REMOTE` = that name
+
+Record `FORK_REMOTE` now. **Use it in all subsequent commands** (push, fetch,
+ls-remote) instead of hardcoding `fork` or `origin`.
 
 ### Step 4a: Check Fork Sync Status
 
@@ -336,11 +357,11 @@ permission by design.
 
 ```bash
 # Fetch the fork to get its current state
-git fetch fork
+git fetch FORK_REMOTE
 
-# Check for workflow file differences between fork/main and local main
-# (local main should be synced with upstream)
-WORKFLOW_DIFF=$(git diff fork/main..main -- .github/workflows/ --name-only 2>/dev/null)
+# Check for workflow file differences between fork/DEFAULT_BRANCH and local DEFAULT_BRANCH
+# (local DEFAULT_BRANCH should be synced with upstream)
+WORKFLOW_DIFF=$(git diff FORK_REMOTE/DEFAULT_BRANCH..DEFAULT_BRANCH -- .github/workflows/ --name-only 2>/dev/null)
 
 if [ -n "$WORKFLOW_DIFF" ]; then
   echo "Fork is out of sync with upstream (workflow files differ):"
@@ -351,11 +372,11 @@ fi
 **If workflow differences exist — attempt automated sync:**
 
 ```bash
-# Try to sync the fork's main branch with upstream
-gh api --method POST repos/FORK_OWNER/REPO/merge-upstream -f branch=main
+# Try to sync the fork's default branch with upstream
+gh api --method POST repos/FORK_OWNER/REPO/merge-upstream -f branch=DEFAULT_BRANCH
 ```
 
-- If this succeeds: fetch the fork again (`git fetch fork`) and continue
+- If this succeeds: fetch the fork again (`git fetch FORK_REMOTE`) and continue
 - If this fails (usually due to workflow permission restrictions): guide the
   user to sync manually
 
@@ -372,7 +393,7 @@ gh api --method POST repos/FORK_OWNER/REPO/merge-upstream -f branch=main
 >
 > 2. **Via command line** (may require `gh auth refresh -s workflow` first):
 >    ```
->    gh repo sync FORK_OWNER/REPO --branch main
+>    gh repo sync FORK_OWNER/REPO --branch DEFAULT_BRANCH
 >    ```
 >
 > Let me know when the sync is complete and I'll continue with the PR.
@@ -381,10 +402,10 @@ gh api --method POST repos/FORK_OWNER/REPO/merge-upstream -f branch=main
 
 ```bash
 # Fetch the updated fork
-git fetch fork
+git fetch FORK_REMOTE
 
-# Rebase the feature branch onto the synced fork/main
-git rebase fork/main
+# Rebase the feature branch onto the synced fork/DEFAULT_BRANCH
+git rebase FORK_REMOTE/DEFAULT_BRANCH
 
 # Continue to Step 5 (create branch)
 ```
@@ -434,8 +455,8 @@ and include that instead.
 # Ensure git uses gh for authentication
 gh auth setup-git
 
-# Push the branch
-git push -u fork BRANCH_NAME
+# Push the branch (use FORK_REMOTE from Step 4)
+git push -u FORK_REMOTE BRANCH_NAME
 ```
 
 **If this fails:**
@@ -445,7 +466,7 @@ git push -u fork BRANCH_NAME
   re-authenticate or the sandbox may be blocking network access.
 - **Remote not found**: Verify the fork remote URL is correct.
 - **Permission denied**: The fork remote may be pointing to upstream, not the
-  actual fork. Verify with `git remote get-url fork`.
+  actual fork. Verify with `git remote get-url FORK_REMOTE`.
 
 ### Step 8: Create the Draft PR
 
@@ -465,7 +486,7 @@ gh pr create \
   --draft \
   --repo UPSTREAM_OWNER/REPO \
   --head FORK_OWNER:BRANCH_NAME \
-  --base main \
+  --base DEFAULT_BRANCH \
   --title "fix(SCOPE): SHORT_DESCRIPTION" \
   --body-file artifacts/bugfix/docs/pr-description.md
 ```
@@ -486,7 +507,7 @@ Do NOT retry, do NOT debug further, do NOT fall back to a patch file. Instead:
    query parameters so the PR form opens fully populated:
 
    ```text
-   https://github.com/UPSTREAM_OWNER/REPO/compare/main...FORK_OWNER:BRANCH_NAME?expand=1&title=URL_ENCODED_TITLE&body=URL_ENCODED_BODY
+   https://github.com/UPSTREAM_OWNER/REPO/compare/DEFAULT_BRANCH...FORK_OWNER:BRANCH_NAME?expand=1&title=URL_ENCODED_TITLE&body=URL_ENCODED_BODY
    ```
 
    URL-encode the title and body. If the encoded URL would exceed ~8KB
@@ -513,7 +534,7 @@ Do NOT retry, do NOT debug further, do NOT fall back to a patch file. Instead:
    ```
 
 **If "branch not found"**: The push in Step 7 may have failed silently.
-Verify with `git ls-remote fork BRANCH_NAME`.
+Verify with `git ls-remote FORK_REMOTE BRANCH_NAME`.
 
 ### Step 9: Confirm and Report
 
@@ -605,7 +626,7 @@ or network access is completely blocked:
 | `gh repo fork` fails | Sandbox blocks forking | User creates fork manually |
 | Branch not found on remote | Push failed silently | Re-run `git push`, check network |
 | No changes to commit | Changes already committed or not staged | Check `git status`, `git log` |
-| Wrong base branch | Upstream default isn't `main` | Check with `gh repo view --json defaultBranchRef` |
+| Wrong base branch | `DEFAULT_BRANCH` wasn't detected or was overridden | Re-run `gh repo view --json defaultBranchRef` and update `DEFAULT_BRANCH` |
 
 ## Notes
 
