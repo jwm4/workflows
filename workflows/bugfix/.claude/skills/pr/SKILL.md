@@ -88,7 +88,43 @@ Record `GH_USER` and `AUTH_TYPE`:
 - If `gh api user` succeeded: `AUTH_TYPE` = `user-token`, `GH_USER` = the login
 - If `gh api user` failed but `/installation/repositories` worked:
   `AUTH_TYPE` = `github-app`, `GH_USER` = the repo owner login
-- If `gh auth status` itself failed: `AUTH_TYPE` = `none`
+- If `gh auth status` itself failed: try recovering from an expired token
+  (see below). If recovery fails: `AUTH_TYPE` = `none`
+
+**Recovering from expired tokens:** Platform sessions often start with a
+`GITHUB_TOKEN` env var that can expire mid-session. The `refresh_credentials`
+MCP tool refreshes the backend but does NOT update the shell env var. If
+`gh auth status` fails, check for a git credential helper:
+
+```bash
+git config --global credential.helper 2>/dev/null
+```
+
+If a credential helper exists (e.g., `/tmp/git-credential-ambient`), query it
+for a fresh token:
+
+```bash
+FRESH_TOKEN=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null | grep '^password=' | cut -d= -f2)
+```
+
+If that returns a token, export it and re-check auth:
+
+```bash
+export GITHUB_TOKEN="$FRESH_TOKEN"
+gh auth status
+```
+
+**Important:** Each shell invocation gets a fresh environment, so you must
+prepend the export to every subsequent `gh` command, or write the token to
+`~/.config/gh/hosts.yml` so `gh` picks it up natively:
+
+```bash
+gh auth login --with-token <<< "$FRESH_TOKEN"
+```
+
+The `gh auth login` approach is preferred — it persists for all subsequent
+`gh` commands without per-command exports. After recovery, re-run the identity
+checks above to set `AUTH_TYPE` and `GH_USER`.
 
 ### Step 1: Locate the Project Repository
 
@@ -619,6 +655,7 @@ or network access is completely blocked:
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `gh auth status` fails | Not logged in | User must run `gh auth login` |
+| `gh` commands return 401 "Bad credentials" | `GITHUB_TOKEN` expired mid-session | Query git credential helper for fresh token, then `gh auth login --with-token` (see Step 0 recovery) |
 | `git push` "could not read Username" | git credential helper not configured | Run `gh auth setup-git` then retry push |
 | `git push` permission denied | Pushing to upstream, not fork | Verify remote URL, switch to fork |
 | `git push` "refusing to allow...without `workflows` permission" | Fork out of sync with upstream (missing workflow files) | Run Step 4a: sync fork, then rebase and retry push |
