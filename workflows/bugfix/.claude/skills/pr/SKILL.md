@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Create a pull request for a bug fix, handling fork workflows, authentication, and remote setup systematically.
+description: Create a pull request from the current branch. Use this instead of running gh pr create directly — it detects GitHub App vs user auth, finds or creates forks, syncs workflow files, detects the upstream default branch, and falls back to compare URLs when API access is limited.
 ---
 
 # Create Pull Request Skill
