@@ -192,14 +192,15 @@ gh repo view --json nameWithOwner,defaultBranchRef --jq '{nameWithOwner, default
 This returns both the repo name and its default branch. Record
 `UPSTREAM_OWNER/REPO` and `DEFAULT_BRANCH` from the output.
 
-If `gh` is NOT authenticated, extract from the git remote:
+If `gh` is NOT authenticated, extract from the upstream remote (identified in
+Step 2b as `UPSTREAM_REMOTE`):
 
 ```bash
-# Repo name
-git remote get-url origin | sed -E 's#.*/([^/]+/[^/]+?)(\.git)?$#\1#'
+# Repo name (use UPSTREAM_REMOTE, not necessarily origin — origin may be the fork)
+git remote get-url UPSTREAM_REMOTE | sed -E 's#.*/([^/]+/[^/]+?)(\.git)?$#\1#'
 
 # Default branch
-git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}'
+git remote show UPSTREAM_REMOTE 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}'
 ```
 
 Record the results as `UPSTREAM_OWNER/REPO` and `DEFAULT_BRANCH`.
