@@ -336,6 +336,7 @@ After all agents complete, synthesize and present results. Use the format approp
 - Checker verdict and any caveats
 - Test results (if applicable)
 - Open concerns or follow-up items
+- After presenting the summary, ask the user if they'd like to create a PR. If yes, invoke the `/pr` skill which handles fork workflows, authentication, and remote setup systematically. Do NOT attempt ad-hoc PR creation -- always use `/pr`.
 
 **pr-review**:
 ```

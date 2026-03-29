@@ -56,6 +56,7 @@ Results are synthesized in a format appropriate to the task type.
 | Skill | Description |
 |-------|-------------|
 | `/dev-team [task]` | Classify a task, assemble a team, and execute |
+| `/pr` | Create a pull request with systematic fork/auth handling |
 
 ## Output Artifacts
 
