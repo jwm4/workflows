@@ -5,27 +5,6 @@ description: Create a pull request from the current branch. Use this instead of 
 
 # Create Pull Request Skill
 
-## Dispatch
-
-If you were dispatched by the team lead, continue below.
-Otherwise, read `.claude/skills/dev-team/SKILL.md` first — it will send
-you back here with the proper workflow context.
-
----
-
-## Workflow Context
-
-This skill is workflow-agnostic. The following values are set by the calling
-workflow and used throughout this document:
-
-| Variable | Value |
-| --- | --- |
-| `WORKFLOW_NAME` | `dev-team` |
-| `ARTIFACT_DIR` | `artifacts/dev-team/` |
-| `COORDINATOR_SKILL` | `.claude/skills/dev-team/SKILL.md` |
-
----
-
 You are preparing to submit changes as a pull request. This skill provides a
 systematic, failure-resistant process for getting code from the working directory
 into a PR. It handles the common obstacles: authentication, fork workflows,
@@ -508,8 +487,9 @@ accurate commit message. Don't make up details.
 **Include the PR description in the commit body.** When a PR has a single
 commit, GitHub auto-fills the PR description from the commit message. This
 ensures the PR form is pre-populated even when `gh pr create` fails (a
-common case for bot environments). If `ARTIFACT_DIR/docs/pr-description.md`
-exists, append its content after the `Fixes #N` line. If it doesn't exist,
+common case for bot environments). If a `docs/pr-description.md` artifact
+exists in the workflow's artifact directory, append its content after the
+`Fixes #N` line. If it doesn't exist,
 compose a brief PR body from session context (problem, approach, testing)
 and include that instead.
 
@@ -552,7 +532,7 @@ gh pr create \
   --head FORK_OWNER:BRANCH_NAME \
   --base DEFAULT_BRANCH \
   --title "TYPE(SCOPE): SHORT_DESCRIPTION" \
-  --body-file ARTIFACT_DIR/docs/pr-description.md
+  --body-file docs/pr-description.md
 ```
 
 `--head` must be `FORK_OWNER:BRANCH_NAME` format (with the owner prefix) for
@@ -564,8 +544,8 @@ composed from session artifacts.
 This is a common and expected outcome when running as a GitHub App bot.
 Do NOT retry, do NOT debug further, do NOT fall back to a patch file. Instead:
 
-1. **Write the PR description** to `ARTIFACT_DIR/docs/pr-description.md`
-   (if not already written).
+1. **Write the PR description** to `docs/pr-description.md` in the
+   workflow's artifact directory (if not already written).
 
 2. **Give the user a pre-filled GitHub compare URL** with `title` and `body`
    query parameters so the PR form opens fully populated:
@@ -626,7 +606,7 @@ Diagnose it using the Error Recovery table and retry.
 If `gh pr create` fails but the branch is pushed to the fork (this is a
 **common and expected** outcome when running as a GitHub App bot):
 
-1. **Write the PR body** to `ARTIFACT_DIR/docs/pr-description.md`
+1. **Write the PR body** to `docs/pr-description.md` in the artifact directory
 2. **Provide the compare URL with `title` and `body` query params** so the
    PR form opens fully populated (see Step 8 failure path for format)
 3. **Provide clone-and-checkout commands** for local testing
@@ -647,7 +627,7 @@ Only if ALL of the above fail — for example, the user has no GitHub account,
 or network access is completely blocked:
 
 1. Generate a patch: `git diff > changes.patch`
-2. Write it to `ARTIFACT_DIR/changes.patch`
+2. Write it to the workflow's artifact directory as `changes.patch`
 3. Explain to the user how to apply it: `git apply changes.patch`
 4. **Acknowledge this is a degraded experience** and explain what prevented
    the normal flow
@@ -655,8 +635,8 @@ or network access is completely blocked:
 ## Output
 
 - The PR URL (printed to the user)
-- Optionally updates `ARTIFACT_DIR/docs/pr-description.md` if it didn't
-  already exist
+- Optionally writes `docs/pr-description.md` to the artifact directory if
+  it didn't already exist
 
 ## Usage Examples
 
@@ -697,8 +677,8 @@ or network access is completely blocked:
 
 - This skill assumes the implementation work (code changes, tests) is already
   done before invoking `/pr`.
-- If a PR description artifact exists at `ARTIFACT_DIR/docs/pr-description.md`,
-  this skill will use it.
+- If a `docs/pr-description.md` artifact already exists in the workflow's
+  artifact directory, this skill will use it.
 - If no PR description artifact exists, this skill creates a minimal PR body
   from session context (conversation history, prior artifacts).
 - The fork workflow is the standard for open-source contributions. Even if the
@@ -712,5 +692,5 @@ Report your results:
 - What was included
 - Any follow-up actions needed (mark ready for review, add reviewers, etc.)
 
-Then announce that you are returning to `COORDINATOR_SKILL` and **re-read
-that file** for next-step guidance.
+Then return to the coordinating skill that dispatched you (if any) and
+**re-read that file** for next-step guidance.
