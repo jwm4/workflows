@@ -63,14 +63,51 @@ jira_search(
 )
 ```
 
+## Cycle Time & Status Transitions
+
+Use specialized tools instead of computing cycle time from raw dates:
+
+### jira_get_issue_sla
+
+Returns pre-computed cycle time, lead time, and time-in-status breakdowns.
+
+```
+jira_get_issue_sla(issue_key="KEY-1")
+```
+
+Best for resolved items where you need accurate cycle time.
+
+### jira_get_issue_dates
+
+Returns status transition history (timestamps for each status change).
+
+```
+jira_get_issue_dates(issue_key="KEY-1")
+```
+
+Use this for WIP aging (how long an item has been in its current status)
+and for computing cycle time manually when SLA data isn't available.
+
+Batch calls for the top 10–15 items rather than every sprint item.
+
 ## Changelog Data
 
-Changelogs add significant payload. Only request them when needed.
+Changelogs add significant payload. Do NOT include `expand=changelog` on
+the main sprint query — fetch changelogs separately for targeted items.
 
-### When to Include Changelog
+### Preferred: jira_batch_get_changelogs
 
-Include `expand=changelog` for the **top 10-15 highest-risk items only**
-(oldest, blocked, carryover). Use a targeted follow-up query:
+Fetches changelogs for multiple issues in one call (Cloud only):
+
+```
+jira_batch_get_changelogs(issue_keys=["KEY-1", "KEY-2", "KEY-3"])
+```
+
+Use this for the top 10–15 highest-risk items (oldest, blocked, carryover).
+
+### Fallback: jira_search with expand
+
+If the batch tool is unavailable:
 
 ```
 jira_search(
@@ -127,14 +164,24 @@ sprint = SPRINT_ID AND cf[STORY_POINTS_ID] is EMPTY
 sprint = SPRINT_ID AND description is EMPTY
 ```
 
+## Tools to Avoid
+
+| Tool | Why |
+| --- | --- |
+| `jira_get_all_projects` | Returns 1.9M+ chars. Never needed — use `jira_get_agile_boards` with the board/project/component name the user gave you. |
+| `fields=*all` on sprint queries | Returns 100+ custom fields per issue. Use explicit field lists. |
+| `expand=changelog` on sprint queries | Bloats responses. Use `jira_batch_get_changelogs` separately for targeted items. |
+
 ## Data Volume Guidelines
 
 | Query Type | Typical Size | Notes |
 | --- | --- | --- |
 | 20 issues, explicit fields | 10-30k chars | Ideal |
 | 20 issues, `fields=*all` | 300-600k chars | Avoid |
-| 20 issues, explicit fields + changelog | 50-100k chars | Use selectively |
+| `jira_batch_get_changelogs` (10 items) | 20-50k chars | Targeted |
+| `jira_get_issue_sla` (10 items) | 5-15k chars | Lightweight |
 | 20 issues, `fields=*all` + changelog | 500k-1M chars | Never do this |
+| `jira_get_all_projects` | 1.9M chars | Never do this |
 
 If the response exceeds tool output limits (~25k tokens), save to a file and
 parse with `jq` or read in chunks.

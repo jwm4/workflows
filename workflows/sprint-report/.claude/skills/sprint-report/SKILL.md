@@ -193,12 +193,29 @@ data is insufficient rather than omitting the dimension.
 | --- | --- |
 | Commitment Reliability | delivery rate (points or items completed / committed), item completion rate |
 | Scope Stability | items added/removed mid-sprint, scope change %, sprint goal alignment |
-| Flow Efficiency | cycle time (created → resolved), WIP count, status distribution |
+| Flow Efficiency | cycle time, WIP count, status distribution (see cycle time tools below) |
 | Story Sizing | point distribution, oversized items (>8 pts), unestimated items |
 | Work Distribution | load per assignee, concentration risk (>30% = flag), unassigned items |
 | Blocker Analysis | flagged items, blocking/blocked relationships, impediment duration |
 | Backlog Health | acceptance criteria coverage, priority distribution, definition of ready |
 | Delivery Predictability | carryover count, zombie items (>60 days old), aging analysis |
+
+### Cycle Time Calculation
+
+Prefer specialized tools over manual date arithmetic:
+
+1. **Best:** `jira_get_issue_sla` — returns pre-computed cycle time, lead
+   time, and time-in-status breakdowns. Call for resolved items.
+2. **Good:** `jira_get_issue_dates` — returns status transition history.
+   Calculate cycle time as the span from first "In Progress" transition to
+   resolution.
+3. **Fallback:** `created` → `resolutiondate` from sprint issue data (less
+   accurate — includes backlog time).
+
+For items still in progress, use `jira_get_issue_dates` to get time-in-status
+for the current status. This is useful for WIP aging analysis.
+
+Batch these calls for the top 10–15 items to avoid excessive API calls.
 
 ### Sprint Goal Alignment
 
@@ -334,14 +351,19 @@ Key placeholders and how to derive them:
 
 ## Step 6: Changelog Analysis (Conditional)
 
-Changelogs add significant payload. Only request them when needed.
+Changelogs add significant payload. Do NOT include `expand=changelog` on the
+main sprint query in Step 1b — fetch changelogs separately for targeted items.
 
-**If changelog data is already present** (from `expand=changelog` in Step 1):
-parse it for the top 10–15 highest-risk items.
+**Preferred tool:** `jira_batch_get_changelogs` — fetches changelogs for
+multiple issue keys in one call. Use this for the top 10–15 highest-risk
+items (oldest, blocked, carryover, reassigned).
 
-**If changelog data is NOT present** and enrichment would add value: fetch it
-for just the highest-risk items using a targeted query
-(`jira_search` with `key in (KEY-1, KEY-2, ...)` and `expand=changelog`).
+```
+jira_batch_get_changelogs(issue_keys=["KEY-1", "KEY-2", "KEY-3", ...])
+```
+
+**Fallback** (if batch tool is unavailable): `jira_search` with
+`key in (KEY-1, KEY-2, ...)` and `expand=changelog`.
 
 **If skipping entirely:** note in the report that some anti-patterns (item
 repurposing, hidden work, reassignment churn) could not be assessed.
