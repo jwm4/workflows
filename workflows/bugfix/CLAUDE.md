@@ -12,11 +12,9 @@ Systematic bug resolution through these phases:
 8. **PR** (`/pr`) — Submit a pull request
 9. **Summary** (`/summary`) — Synthesize all artifacts into a final status report
 
-All phases are implemented as skills at `.claude/skills/{name}/SKILL.md`.
-The workflow controller at `.claude/skills/controller/SKILL.md` manages phase
-transitions and recommendations. The `/speedrun` skill at
-`.claude/skills/speedrun/SKILL.md` runs all remaining phases without stopping.
-Artifacts go in `artifacts/bugfix/`.
+All phases are implemented as skills. The controller skill manages phase
+transitions and recommendations. The speedrun skill runs all remaining phases
+without stopping. Artifacts go in `artifacts/bugfix/`.
 
 ## Principles
 

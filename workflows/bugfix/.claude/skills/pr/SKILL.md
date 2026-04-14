@@ -692,5 +692,3 @@ Report your results:
 - What was included
 - Any follow-up actions needed (mark ready for review, add reviewers, etc.)
 
-Then return to the coordinating skill that dispatched you (if any) and
-**re-read that file** for next-step guidance.

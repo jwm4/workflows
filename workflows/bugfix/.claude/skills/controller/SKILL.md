@@ -10,31 +10,31 @@ executing phases and handling transitions between them.
 
 ## Phases
 
-1. **Assess** (`/assess`) — `.claude/skills/assess/SKILL.md`
+1. **Assess** (`/assess`) — the `assess` skill
    Read the bug report, summarize your understanding, identify gaps, propose a plan.
 
-2. **Reproduce** (`/reproduce`) — `.claude/skills/reproduce/SKILL.md`
+2. **Reproduce** (`/reproduce`) — the `reproduce` skill
    Confirm the bug exists by reproducing it in a controlled environment.
 
-3. **Diagnose** (`/diagnose`) — `.claude/skills/diagnose/SKILL.md`
+3. **Diagnose** (`/diagnose`) — the `diagnose` skill
    Trace the root cause through code analysis, git history, and hypothesis testing.
 
-4. **Fix** (`/fix`) — `.claude/skills/fix/SKILL.md`
+4. **Fix** (`/fix`) — the `fix` skill
    Implement the minimal code change that resolves the root cause.
 
-5. **Test** (`/test`) — `.claude/skills/test/SKILL.md`
+5. **Test** (`/test`) — the `test` skill
    Write regression tests, run the full suite, and verify the fix holds.
 
-6. **Review** (`/review`) — `.claude/skills/review/SKILL.md`
+6. **Review** (`/review`) — the `review` skill
    Critically evaluate the fix and tests — look for gaps, regressions, and missed edge cases.
 
-7. **Document** (`/document`) — `.claude/skills/document/SKILL.md`
+7. **Document** (`/document`) — the `document` skill
    Create release notes, changelog entries, and team communications.
 
-8. **PR** (`/pr`) — `.claude/skills/pr/SKILL.md`
+8. **PR** (`/pr`) — the `pr` skill
    Push the branch to a fork and create a draft pull request.
 
-9. **Summary** (`/summary`) — `.claude/skills/summary/SKILL.md`
+9. **Summary** (`/summary`) — the `summary` skill
    Scan all artifacts and present a synthesized summary of findings, decisions,
    and status. Can also be invoked at any point mid-workflow.
 
@@ -42,20 +42,13 @@ Phases can be skipped or reordered at the user's discretion.
 
 ## How to Execute a Phase
 
-1. **Announce** the phase to the user before doing anything else. Include this
-   file as the dispatcher so skills know where to return, e.g.,
-   "Starting the /fix phase (dispatched by `.claude/skills/controller/SKILL.md`)."
-   This is very important so the user knows the workflow is working, learns
-   about the available phases, and so skills can find their way back here.
-2. **Read** the skill file from the list above. You MUST call the Read tool on
-   the skill's `SKILL.md` file before executing. If you find yourself executing
-   a phase without having read its skill file, you are doing it wrong — stop
-   and read it now.
-3. **Execute** the skill's steps directly — the user should see your progress
-4. When the skill is done, it will report its findings and re-read this
-   controller. Then use "Recommending Next Steps" below to offer options.
-5. Present the skill's results and your recommendations to the user.
-6. **Use `AskUserQuestion` to get the user's decision.** Present the
+1. **Announce** the phase to the user before doing anything else, so the user
+   knows the workflow is working and learns about the available phases.
+2. **Run** the skill for the current phase.
+3. When the skill completes, use "Recommending Next Steps" below to offer
+   options.
+4. Present the skill's results and your recommendations to the user.
+5. **Use `AskUserQuestion` to get the user's decision.** Present the
    recommended next step and alternatives as options. Do NOT continue until the
    user responds. This is a hard gate — the `AskUserQuestion` tool triggers
    platform notifications and status indicators so the user knows you need
@@ -126,10 +119,6 @@ directly — don't force them through earlier phases.
   response between phases. This is the single most important rule in this
   controller. If you proceed to another phase without the user's explicit
   go-ahead, the workflow is broken.
-- **Always read skill files.** Every phase execution MUST begin with a Read
-  tool call on the skill's `SKILL.md` file. Do not execute a phase from memory
-  or general knowledge — the skill files contain specific, tested instructions
-  that differ from what you might do ad-hoc.
 - **Urgency does not bypass process.** Security advisories, critical bugs, and
   production incidents may create pressure to act fast. The phase-gated
   workflow exists precisely to prevent hasty action. Follow every phase gate

@@ -5,11 +5,8 @@ description: Scan all workflow artifacts and present a synthesized summary of fi
 
 # Workflow Summary Skill
 
-## Dispatch
-
-This skill can be invoked at any point in the workflow — from the controller,
-from speedrun, or directly by the user. It does not require prior phases to
-have completed; it summarizes whatever exists so far.
+This skill can be invoked at any point in the workflow. It does not require
+prior phases to have completed; it summarizes whatever exists so far.
 
 ---
 
@@ -136,6 +133,3 @@ Save the summary to `artifacts/bugfix/summary.md`.
 
 The summary is the deliverable. Present it and stop — there is no next phase
 to recommend.
-
-If dispatched by the controller or speedrun, announce which file you are
-returning to and re-read it.

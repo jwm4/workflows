@@ -5,8 +5,8 @@ description: Speed-run the remaining bugfix phases without stopping between them
 
 # /speedrun — Run the Remaining Workflow
 
-You are in **speedrun mode**. Run the next incomplete phase, then return here
-for the next one. Do not use the controller (`.claude/skills/controller/SKILL.md`).
+You are in **speedrun mode**. Run the next incomplete phase, then continue to
+the next one. Do not use the controller skill.
 
 ## User Input
 
@@ -20,13 +20,12 @@ phases to include or skip.
 
 ## How Speedrun Works
 
-Each time you read this file, you will:
+The speedrun loop:
 
 1. Determine which phase to run next (see "Determine Next Phase" below)
 2. If all phases are done (including `/summary`), stop
-3. Otherwise, execute that one phase (see "Execute a Phase" below)
-4. The phase skill will tell you to return to the file that dispatched it —
-   that's this file (`.claude/skills/speedrun/SKILL.md`). Re-read it and repeat.
+3. Otherwise, run the skill for that phase (see "Execute a Phase" below)
+4. When the skill completes, continue to the next phase
 
 This loop continues until all phases are complete or an escalation stops you.
 
@@ -39,15 +38,15 @@ context, then pick the first phase that is NOT done.
 
 | Phase | Skill | "Done" signal |
 | ------- | ------- | --------------- |
-| assess | `.claude/skills/assess/SKILL.md` | `artifacts/bugfix/reports/assessment.md` exists |
-| reproduce | `.claude/skills/reproduce/SKILL.md` | `artifacts/bugfix/reports/reproduction.md` exists |
-| diagnose | `.claude/skills/diagnose/SKILL.md` | `artifacts/bugfix/analysis/root-cause.md` exists |
-| fix | `.claude/skills/fix/SKILL.md` | `artifacts/bugfix/fixes/implementation-notes.md` exists |
-| test | `.claude/skills/test/SKILL.md` | `artifacts/bugfix/tests/verification.md` exists |
-| review | `.claude/skills/review/SKILL.md` | `artifacts/bugfix/review/verdict.md` exists |
-| document | `.claude/skills/document/SKILL.md` | `artifacts/bugfix/docs/pr-description.md` exists |
-| pr | `.claude/skills/pr/SKILL.md` | A PR URL has been shared in conversation |
-| summary | `.claude/skills/summary/SKILL.md` | `artifacts/bugfix/summary.md` exists |
+| assess | `assess` | `artifacts/bugfix/reports/assessment.md` exists |
+| reproduce | `reproduce` | `artifacts/bugfix/reports/reproduction.md` exists |
+| diagnose | `diagnose` | `artifacts/bugfix/analysis/root-cause.md` exists |
+| fix | `fix` | `artifacts/bugfix/fixes/implementation-notes.md` exists |
+| test | `test` | `artifacts/bugfix/tests/verification.md` exists |
+| review | `review` | `artifacts/bugfix/review/verdict.md` exists |
+| document | `document` | `artifacts/bugfix/docs/pr-description.md` exists |
+| pr | `pr` | A PR URL has been shared in conversation |
+| summary | `summary` | `artifacts/bugfix/summary.md` exists |
 
 ### Rules
 
@@ -59,25 +58,21 @@ context, then pick the first phase that is NOT done.
 
 ## Execute a Phase
 
-1. **Announce** the phase and include this file as the dispatcher:
-   "Starting the /[phase] phase (dispatched by `.claude/skills/speedrun/SKILL.md` — speedrun mode)."
-2. **Read** the phase skill from the table above
-3. **Execute** the skill's steps
-4. The skill will tell you to announce which file you are returning to and
-   re-read it. Return to **this file** (`.claude/skills/speedrun/SKILL.md`).
+1. **Announce** the phase to the user (e.g., "Starting the /fix phase — speedrun mode.")
+2. **Run** the skill for the current phase
+3. When the skill completes, continue to the next phase
 
 ## Speedrun Rules
 
-- **Do not stop and wait between phases.** After each phase, return here and
+- **Do not stop and wait between phases.** After each phase completes,
   continue to the next one.
-- **Do not read the controller.** This skill replaces the controller for this
-  run. If you are tempted to read `.claude/skills/controller/SKILL.md`, read
-  `.claude/skills/speedrun/SKILL.md` instead.
+- **Do not use the controller skill.** This skill replaces the controller for
+  this run.
 - **DO still follow CLAUDE.md escalation rules.** If a phase hits an
   escalation condition (confidence below 80%, unclear root cause after
   investigation, multiple valid solutions with unclear trade-offs, security or
   compliance concern, architectural decision needed), stop and ask the user.
-  After the user responds, re-read this file to resume.
+  After the user responds, continue with the next phase.
 
 ## Phase-Specific Notes
 
