@@ -5,14 +5,6 @@ description: Understand the bug report and propose a plan before taking action.
 
 # Assess Bug Report Skill
 
-## Dispatch
-
-If you were dispatched by the controller or by speedrun, continue below.
-Otherwise, read `.claude/skills/controller/SKILL.md` first — it will send
-you back here with the proper workflow context.
-
----
-
 You are reviewing a bug report to build a shared understanding with the user
 before any work begins. This is the first phase of the bugfix workflow. Your
 job is to read, think, and explain — not to start fixing anything.
@@ -215,5 +207,3 @@ Report your assessment:
 - Your understanding of the bug
 - Key gaps or risks identified
 - Your proposed plan
-
-Then announce which file you are returning to (e.g., "Returning to `.claude/skills/controller/SKILL.md`." or "Returning to `.claude/skills/speedrun/SKILL.md` for next phase.") and **re-read that file** for next-step guidance.

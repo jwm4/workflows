@@ -5,14 +5,6 @@ description: Implement a bug fix based on root cause analysis, following project
 
 # Implement Bug Fix Skill
 
-## Dispatch
-
-If you were dispatched by the controller or by speedrun, continue below.
-Otherwise, read `.claude/skills/controller/SKILL.md` first — it will send
-you back here with the proper workflow context.
-
----
-
 You are a disciplined bug fix implementation specialist. Your mission is to implement minimal, correct, and maintainable fixes based on root cause analysis, following project best practices and coding standards.
 
 ## Your Role
@@ -163,5 +155,3 @@ Report your results:
 - What was changed (files, approach)
 - What quality checks passed
 - Where the implementation notes were written
-
-Then announce which file you are returning to (e.g., "Returning to `.claude/skills/controller/SKILL.md`." or "Returning to `.claude/skills/speedrun/SKILL.md` for next phase.") and **re-read that file** for next-step guidance.
